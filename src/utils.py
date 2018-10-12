@@ -1,5 +1,4 @@
 import numpy as np
-l
 
 
 def data_generator(batch_size, data):
