@@ -1,10 +1,10 @@
 import numpy as np 
 import tensorflow as tf
+import os
+import pandas as pd 
 
 from ops import causal_conv, wave_net_activation, channel_normalization
 from utils import data_generator
-
-
 
 
 class TCN(object):
@@ -30,6 +30,7 @@ class TCN(object):
         self.decay_rate = configs.decay_rate
         self.decay_steps = configs.decay_steps
         self.save_dir = configs.save_dir
+        self.logits = None
 
     def residual_block(self, x, s, dilation, 
                         activation, 
@@ -56,8 +57,9 @@ class TCN(object):
         with tf.variable_scope("residual_block"):
             
             with tf.variable_scope("dilated_causal_conv"):
-                filter_ = tf.get_variable("filter_", shape = [kernel_size, nb_filters, nb_filters], dtype = tf.float32)
-                result, x = causal_conv(x, filter_, dilation)
+                # filter_ = tf.get_variable("filter_", shape = [kernel_size, nb_filters, nb_filters], dtype = tf.float32)
+                filter_shape = [kernel_size, nb_filters, nb_filters]
+                x = causal_conv(x, filter_shape, dilation)
             
             with tf.variable_scope("layer_norm"):
                 x = tf.contrib.layers.layer_norm(x)
@@ -159,40 +161,40 @@ class TCN(object):
         """
 
         if not self.logits:
-            self.model()
+            self.build_network()
         
-        self.loss = tf.reduce_mean(self.xentropy_loss(self.logits, label_ph))
+        self.loss = tf.reduce_mean(self.xentropy_loss(self.logits, self.label_ph))
 
-        optimizer = tf.train.AdamOptimizer(learning_rate).minimize(self.loss, global_step = self.global_step)
+        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss, global_step = self.global_step)
 
         saver = tf.train.Saver(max_to_keep = 20)
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             for epoch in range(self.epochs):
-                writer = tf.summary.FileWriter(os.path.dirname(save_dir), sess.graph)
+                writer = tf.summary.FileWriter(os.path.dirname(self.save_dir), sess.graph)
                 total_train_cost, total_val_cost = 0, 0
                 
                 for train_input, train_label in data_generator(self.batch_size, train_data):
 
                     feed_dict = {self.input_ph: train_input, self.label_ph: train_label, self.is_training: True}
-                    cost, _, precision, recall, global_step = sess.run([self.loss, opt, self.precision, self.recall, self.global_step], feed_dict = feed_dict)
+                    cost, _, precision, recall, global_step = sess.run([self.loss, self.optimizer, self.precision, self.recall, self.global_step], feed_dict = feed_dict)
                     print("Epoch: {0}, global_step: {1}, training loss: {2}, training recall: {3}, training precision: {4}".format(
                         epoch, global_step, cost, recall, precision
                     ))
 
 
                 for val_input, val_label in data_generator(self.batch_size, valid_data):
-                    feed_dict = {self.input_ph: input_batch, self.label_ph: label_batch, self.is_training: False}
-                    eval_cost,  = sess.run(loss, feed_dict = feed_dict)
+                    feed_dict = {self.input_ph: val_input, self.label_ph: val_label, self.is_training: False}
+                    eval_cost,  = sess.run(self.loss, feed_dict = feed_dict)
                     total_val_cost += eval_cost
                 if global_step % 10000 == 0:
                     print("Saving model...")
-                    saver.save(sess, save_dir, global_step = global_step)
+                    saver.save(sess, self.save_dir, global_step = global_step)
 
 
     
-    def infer(self):
+    def infer(self, inference_data, ckpt, output_folder):
         """
         Uses a trained model file to get predictions on the specified data.
 
@@ -204,16 +206,17 @@ class TCN(object):
         """
     
         if not self.logits:
-            self.model()
+            self.build_network()
 
         saver = tf.train.Saver()
 
         with tf.Session() as sess:
-            # saver.restore(sess, ckpt)
-            pass
-            # for _ in range(num_data // batch_size):
-            #     data_batch = []
-            #     feed_dict = {input_ph: data_batch}
-            #    predictions = sess.run(predict, feed_dict=feed_dict)
-                ## write results
-    
+            saver.restore(sess, ckpt)
+            feed_dict = {self.input_ph: inference_data}
+            predictions = sess.run(self.predictions, feed_dict=feed_dict)
+
+            df = pd.DataFrame({"Ans":predictions})
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+            output_path = os.path.join(output_folder, "predictions.csv")
+            df.to_csv(output_path, index = False)
