@@ -41,7 +41,7 @@ def pad1d(value, filter_shape, dilation):
 
 def causal_conv(value, filter_shape, dilation, name = "causal_conv", reuse = tf.AUTO_REUSE):
     with tf.name_scope(name):
-        padded_value = pad1d(value, filter_, dilation)
+        padded_value = pad1d(value, filter_shape, dilation)
         k, _, co = filter_shape
         conv = tf.layers.Conv1D(co, k, strides=1, dilation_rate = dilation)(padded_value)
         return conv
