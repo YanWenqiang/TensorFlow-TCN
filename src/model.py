@@ -11,40 +11,27 @@ class TCN(object):
     """
     This class forms the Temporal Convolutional Network
     """
-    def __init__(self, 
-                nb_filters = 64,
-                kernel_size = 2,
-                nb_stacks = 1,
-                dilations = None,
-                activation = 'norm_relu',
-                use_skip_connections = True,
-                dropout_rate = 0.0,
-                return_sequences = True,
-                max_len = None,
-                num_class =None
-                ):
+    def __init__(self, configs):
+        self.nb_filters = configs.nb_filters
+        self.kernel_size = configs.kernel_size
+        self.nb_stacks = configs.nb_stacks
+        self.dilations = configs.dilations
+        self.activation = configs.activation
+        self.use_skip_connections = configs.use_skip_connections
+        self.dropout_rate = configs.dropout_rate
+        self.return_sequences = configs.return_sequences
+        self.max_len = configs.max_len
+        self.num_class = configs.num_class
+        self.batch_size = configs.batch_size
+        self.vocab_size = configs.vocab_size
+        self.embed_size = configs.embed_size
+        self.epochs = configs.epochs
+        self.learning_rate = configs.learning_rate
+        self.decay_rate = configs.decay_rate
+        self.decay_steps = configs.decay_steps
+        self.save_dir = configs.save_dir
 
-        self.nb_filters = nb_filters
-        self.kernel_size = kernel_size
-        self.nb_stacks = nb_stacks
-        self.dilations = dilations
-        self.activation = activation
-        self.use_skip_connections = use_skip_connections
-        self.dropout_rate = dropout_rate
-        self.return_sequences = return_sequences
-        self.logits = None
-        self.max_len = max_len
-        self.num_class = num_class
-        self.batch_size = batch_size
-        self.vocab_size = vocab_size
-        self.embed_size = embed_size
-        self.epochs = epochs
-        self.learning_rate = learning_rate
-        self.decay_rate = decay_rate
-        self.decay_steps = decay_steps
-        self.save_dir = save_dir
-
-    def residual_block(x, s, dilation, 
+    def residual_block(self, x, s, dilation, 
                         activation, 
                         nb_filters, 
                         kernel_size, 
@@ -78,11 +65,11 @@ class TCN(object):
             with tf.variable_scope("activation"):
                 if activation == "norm_relu":
                     x = tf.nn.relu(x)
-                    x = tf.map_fn(channel_normalization, x, dtype = tf.float32)
+                    x = channel_normalization(x)
                 elif activation == "wavenet":
                     x = wave_net_activation(x)
                 else:
-                    x = tf.relu(x)
+                    x = tf.nn.relu(x)
             
             with tf.variable_scope("dropout"):
                 x = tf.contrib.layers.dropout(x, keep_prob = dropout_rate, noise_shape = [1, 1, nb_filters], is_training = is_training)
@@ -110,7 +97,7 @@ class TCN(object):
     def build_network(self):
         """Creates a TCN network
         """
-        dilations = process_dilations(self.dilations)
+        dilations = self.process_dilations(self.dilations)
 
         self.input_ph = tf.placeholder(tf.int32, shape = [None, self.max_len], name = "input_ph")
         self.label_ph = tf.placeholder(tf.int32, shape = [None, self.num_class], name = "label_ph")
@@ -119,18 +106,18 @@ class TCN(object):
 
         with tf.variable_scope("embedding_scope"):
             embedding = tf.get_variable("embedding", shape = [self.vocab_size, self.embed_size], initializer = tf.random_uniform_initializer(minval = -0.5, maxval = 0.5))
-            input_embed = tf.nn.embedding_lookup(embedding, input_ph, name = "input_embed")
+            input_embed = tf.nn.embedding_lookup(embedding, self.input_ph, name = "input_embed")
             
 
-        x = tf.layers.Conv1D(filters = nb_filters, kernel_size = 1, padding = "same")(input_embed) # bottleneck layer change the channel
+        x = tf.layers.Conv1D(filters = self.nb_filters, kernel_size = 1, padding = "same")(input_embed) # bottleneck layer change the channel
         
         with tf.variable_scope("resnet"):
             skip_connections = []
-            for s in range(nb_stacks):
+            for s in range(self.nb_stacks):
                 for i in dilations:
-                    x, skip_out = residual_block(x, s, i, activation, nb_filters, kernel_size, dropout_rate)
+                    x, skip_out = self.residual_block(x, s, i, self.activation, self.nb_filters, self.kernel_size, self.dropout_rate)
                     skip_connections.append(skip_out)
-            if use_skip_connections:
+            if self.use_skip_connections:
                 x = tf.add_n(skip_connections)
             x = tf.nn.relu(x)
 
@@ -151,9 +138,9 @@ class TCN(object):
             self.logits = tf.matmul(x, w) + b # [N, 2]
 
         self.predictions = tf.squeeze(tf.argmax(self.logits, axis = -1))
-        self.precision = tf.metrics.precision(labels = label_ph, predictions = self.predictions)
-        self.recall = tf.metrics.recall(labels = label_ph, predictions = self.predictions)
-        self.accuracy = tf.metrics.accuracy(labels = label_ph, predictions = self.predictions)
+        self.precision = tf.metrics.precision(labels = self.label_ph, predictions = self.predictions)
+        self.recall = tf.metrics.recall(labels = self.label_ph, predictions = self.predictions)
+        self.accuracy = tf.metrics.accuracy(labels = self.label_ph, predictions = self.predictions)
         self.f1_score = 2 * self.precision * self.recall / (self.precision + self.recall)
 
     def train(self, train_data, valid_data = None):
