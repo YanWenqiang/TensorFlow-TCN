@@ -31,7 +31,7 @@ class TCN(object):
         self.output_folder = configs.output_folder
         self.logits = None
         self.checkpoint = configs.checkpoint
-        self.sess = tf.Session()
+        
 
 
     def residual_block(self, inputs, 
@@ -201,33 +201,29 @@ class TCN(object):
         
         
         saver = tf.train.Saver(max_to_keep = 20)
-        # if not os.path.exists(self.save_dir):
-        #     os.makedirs(self.save_dir)
         
-        # if not os.path.exists(self.checkpoint):
-        #     os.makedirs(self.checkpoint)
         
+        with tf.Session() as sess:
+            self.ckpt = os.path.join(self.checkpoint, "model.ckpt")
+            sess.run(tf.global_variables_initializer())
+            sess.run(running_vars_initializer)
+            for epoch in range(self.epochs):
+                writer = tf.summary.FileWriter(self.save_dir, sess.graph)
+                total_train_cost, total_val_cost = 0, 0      
+                for train_input, train_label in data_generator(self.batch_size, train_data):
+                    feed_dict = {self.input_ph: train_input, self.label_ph: train_label, self.is_training: True}
+                    _, _, _, _, cost, precision, recall, global_step = sess.run([self.optimizer, self.prediction_update_op, self.recall_update_op, self.accuracy_update_op,self.loss, self.precision, self.recall, self.global_step], feed_dict = feed_dict)
+                    print("Epoch: {0}, global_step: {1}, training loss: {2}, training recall: {3}, training precision: {4}".format(
+                        epoch, global_step, cost, recall, precision
+                    ))
 
-        self.ckpt = os.path.join(self.checkpoint, "model.ckpt")
-        self.sess.run(tf.global_variables_initializer())
-        self.sess.run(running_vars_initializer)
-        for epoch in range(self.epochs):
-            writer = tf.summary.FileWriter(self.save_dir, self.sess.graph)
-            total_train_cost, total_val_cost = 0, 0      
-            for train_input, train_label in data_generator(self.batch_size, train_data):
-                feed_dict = {self.input_ph: train_input, self.label_ph: train_label, self.is_training: True}
-                _, _, _, _, cost, precision, recall, global_step = self.sess.run([self.optimizer, self.prediction_update_op, self.recall_update_op, self.accuracy_update_op,self.loss, self.precision, self.recall, self.global_step], feed_dict = feed_dict)
-                print("Epoch: {0}, global_step: {1}, training loss: {2}, training recall: {3}, training precision: {4}".format(
-                    epoch, global_step, cost, recall, precision
-                ))
-
-            for val_input, val_label in data_generator(self.batch_size, valid_data):
-                feed_dict = {self.input_ph: val_input, self.label_ph: val_label, self.is_training: False}
-                eval_cost, _, _, _ = self.sess.run([self.loss, self.prediction_update_op, self.recall_update_op, self.accuracy_update_op], feed_dict = feed_dict)
-                total_val_cost += eval_cost
-            #if global_step % 10000 == 0:
-            print("Saving model...")
-            saver.save(self.sess, self.ckpt)
+                for val_input, val_label in data_generator(self.batch_size, valid_data):
+                    feed_dict = {self.input_ph: val_input, self.label_ph: val_label, self.is_training: False}
+                    eval_cost, _, _, _ = sess.run([self.loss, self.prediction_update_op, self.recall_update_op, self.accuracy_update_op], feed_dict = feed_dict)
+                    total_val_cost += eval_cost
+                #if global_step % 10000 == 0:
+                print("Saving model...")
+                saver.save(sess, self.ckpt)
 
 
     
@@ -237,16 +233,21 @@ class TCN(object):
         """
     
 
-        sess = self.sess
-        saver = tf.train.import_meta_graph(os.path.join(self.checkpoint, 'model.ckpt.meta'))
-        saver.restore(sess,tf.train.latest_checkpoint('./models/checkpoint/'))
+        with tf.Session() as sess:
+            
+            saver = tf.train.import_meta_graph(os.path.join(self.checkpoint, 'model.ckpt.meta'))
+            saver.restore(sess,tf.train.latest_checkpoint('./models/checkpoint/'))
+            
+            
+            graph = tf.get_default_graph()
+            predictions = graph.get_tensor_by_name("predictions:0")
+            input_ph = graph.get_tensor_by_name("input_ph:0")
+            is_training = graph.get_tensor_by_name("is_training:0")
+            feed_dict ={input_ph: infer_data, is_training:False}
+            print( sess.run(predictions,feed_dict))
 
-        
-        graph = sess.graph
-        predictions = graph.get_tensor_by_name("predictions:0")
-        input_ph = graph.get_tensor_by_name("input_ph:0")
-        is_training = graph.get_tensor_by_name("is_training:0")
+            #embedding = graph.get_tensor_by_name("embedding_scope/embedding:0")
+            #print(sess.run(embedding))
 
-        feed_dict ={input_ph: infer_data, is_training:False}
-        
-        print( sess.run(predictions,feed_dict))
+
+            
