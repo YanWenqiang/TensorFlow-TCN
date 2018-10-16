@@ -33,10 +33,10 @@ def channel_normalization(x):
 
 
 
-def pad1d(value, filter_shape, dilation):
-    k_w = filter_shape[1]
+def pad1d(value,filter_shape, dilation):
+    k_w, ci, co = filter_shape
     padding = (k_w - 1) * dilation
-    value_ = tf.pad(value, [[0,0], [padding, 0], [0,0]])
+    value_ = tf.pad(value, [[0,0], [int(padding), 0], [0,0]])
     return value_
 
 def causal_conv(value, filter_shape, dilation, name = "causal_conv", reuse = tf.AUTO_REUSE):
@@ -45,3 +45,10 @@ def causal_conv(value, filter_shape, dilation, name = "causal_conv", reuse = tf.
         k, _, co = filter_shape
         conv = tf.layers.Conv1D(co, k, strides=1, dilation_rate = dilation)(padded_value)
         return conv
+
+
+if __name__ == "__main__":
+    inputs = tf.random_normal(shape = [32, 50, 100])
+    filter_shape = [5, 100, 100]
+    conv = causal_conv(inputs, filter_shape, 2)
+    print(conv.shape)
