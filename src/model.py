@@ -139,16 +139,16 @@ class TCN(object):
         x = tf.layers.Conv1D(filters = self.nb_filters, kernel_size = 1, padding = "valid")(input_embed) # bottleneck layer change the channel
         with tf.variable_scope("resnet"):
             skip_connections = []
-            for s in range(self.nb_stacks):
-                for i in self.dilations:
-                    x, skip_out = self.residual_block(inputs = x, index_stack = s, dilation = i, 
-                                                    nb_filters = self.nb_filters, kernel_size = self.kernel_size, 
-                                                    dropout_rate = self.dropout_rate, is_training = self.is_training)
+            # for s in range(self.nb_stacks):
+            for i, d in enumerate(self.dilations):
+                x, skip_out = self.residual_block(inputs = x, index_stack = i, dilation = d, 
+                                                nb_filters = self.nb_filters, kernel_size = self.kernel_size, 
+                                                dropout_rate = self.dropout_rate, is_training = self.is_training)
 
-                    print(x.shape)
-                    skip_connections.append(skip_out)
+                print(x.shape)
+                skip_connections.append(skip_out)
             if self.use_skip_connections:
-                x = tf.add_n(skip_connections)
+                x = tf.add_n(skip_connections) + x
             x = tf.nn.relu(x)
 
         if not self.return_sequences:     # 这里采用最后一个序列作为一句话的向量表征, 设置 return_sequences = False
