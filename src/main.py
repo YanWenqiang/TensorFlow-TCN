@@ -38,6 +38,8 @@ def main():
     if FLAGS.mode == "train":
         # train_path = FLAGS.train_data
         # valid_path = FLAGS.valid_data
+
+
         tx = [[1,2,3], [1,2,3], [1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3]]
         ty = [1,1,1,1,1,1,1,1,1]
         vx = [[1,2,3], [1,2,3], [1,2,3],[1,2,3], [1,2,3], [1,2,3],[1,2,3], [1,2,3], [1,2,3]]
@@ -48,7 +50,6 @@ def main():
     elif FLAGS.mode == "infer":
         # infer_data = []
         ix =  [[1,2,3], [1,2,3], [1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3]]
-        ckpt = os.path.join(FLAGS.checkpoint, "model.ckpt")
         tcn.infer(ix)
 
 if __name__ == "__main__":
